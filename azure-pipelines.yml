@@ -1,0 +1,72 @@
+trigger:
+  batch: true
+
+variables:
+   - group: "dev"
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    variables:
+      buildConfiguration: 'Release'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:  
+
+    - task: UseDotNet@2
+      displayName: Install .NET Core 3.1.x SDK
+      inputs:
+        packageType: 'sdk'
+        version: '3.1.x'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+        arguments: '--configuration $(BuildConfiguration)'
+
+    - task: DotNetCoreCLI@2
+      displayName: Test
+      inputs:
+        command: 'test'
+        projects: '**/*[Tt]ests/*.csproj'
+        arguments: '--configuration $(BuildConfiguration) --logger "trx;verbosity=normal"'
+        publishTestResults: true
+      
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/master'))
+
+    variables:
+      - name: tag
+        value: latest
+      - name: containerRepo
+        value: 'dev'
+      - name: containers
+        value: $(CONTAINER_REGISTRY)/$(IMAGE_REPOSITORY):${{ variables.tag }}
+
+    pool:
+      vmImage: 'ubuntu-latest'
+      workspace:
+          clean: all
+    steps:
+    - task: Docker@2
+      displayName: Build and push Docker image
+      inputs:
+        command: buildAndPush
+        repository: $(IMAGE_REPOSITORY)
+        containerRegistry: $(REGISTRY_CONNECTION)
+        tags: |
+          latest
+          $(Build.SourceVersion)
+
+    - task: AzureWebAppContainer@1
+      displayName: Deploy Docker image to App Service
+      inputs:
+        azureSubscription: $(DEV_SERVICE_CONNECTION)
+        appName: $(IMAGE_REPOSITORY)
+        containers: ${{ variables.containers }}

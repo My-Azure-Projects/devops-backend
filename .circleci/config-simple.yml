@@ -1,0 +1,67 @@
+version: 2.1
+
+orbs:
+  azure-acr: circleci/azure-acr@0.2.0
+
+jobs:
+  build:
+    docker:
+      - image: mcr.microsoft.com/dotnet/core/sdk:3.1 
+  
+    steps:
+      - checkout
+      - run:
+          name: Restore
+          command: dotnet restore
+      - run:
+          name: Build 
+          command: dotnet build --configuration Release --no-restore
+      - run: 
+          name: Test
+          command: dotnet test --no-build --logger "trx;verbosity=normal"
+      - run:
+          name: Publish test results
+          when: always
+          command: |
+            export PATH="$PATH:/root/.dotnet/tools"
+            dotnet tool install -g trx2junit
+            /root/.dotnet/tools/trx2junit **/TestResults/*.trx
+      - store_test_results:
+          path: tests/TestResults
+      - store_artifacts:
+          path: tests/TestResults
+          destination: TestResults
+    
+
+  deploy:
+    machine: 
+      image: ubuntu-1604:201903-01 
+
+    steps:
+      - checkout
+      - azure-acr/build-and-push-image:
+          login-server-name: regrubdevopsshowcase.azurecr.io
+          registry-name: regrubdevopsshowcase
+          repo: rub-devops-showcase
+          tag: latest
+      - run:
+          name: Configure App Service
+          command: >-
+            az webapp config container set --name app-rub-devops-showcase 
+            --resource-group rg-devops-showcase 
+            --docker-custom-image-name regrubdevopsshowcase.azurecr.io/rub-devops-showcase:latest 
+            --docker-registry-server-url https://regrubdevopsshowcase.azurecr.io
+
+workflows:
+  build_and_deploy:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: master
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master

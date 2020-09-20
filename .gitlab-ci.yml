@@ -1,0 +1,26 @@
+stages:
+  - build
+  - deploy
+
+build:
+  image: mcr.microsoft.com/dotnet/core/sdk:3.1 
+  stage: build
+  script:
+    - dotnet restore
+    - dotnet build --configuration Release --no-restore
+    - dotnet test --logger 'trx;verbosity=normal'
+
+deploy:
+  image: docker:stable
+  stage: deploy
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ''
+  services:
+    - docker:dind
+  script:
+    - docker login $DOCKER_REPOSITORY --username $DOCKER_USER --password $DOCKER_PASSWORD
+    - docker build --pull -t regrubdevopsshowcase.azurecr.io/gitlab:latest .
+    - docker push regrubdevopsshowcase.azurecr.io/gitlab:latest
+  only:
+    - master

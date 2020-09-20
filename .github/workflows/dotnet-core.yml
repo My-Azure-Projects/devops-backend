@@ -1,0 +1,50 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [ master, develop, feat/* ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.301
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+    - name: Test
+      run: dotnet test --no-restore --verbosity normal
+  
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+  
+    steps:
+    - name: Azure authentication
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: ACR build and push
+      id: acr
+      uses: ams0/acr-task-github-action@v1
+      with:
+        service_principal: ${{ secrets.service_principal }}
+        service_principal_password: ${{ secrets.service_principal_password }}
+        tenant: ${{ secrets.tenant }}
+        registry: regrubdevopsshowcase
+        repository: github
+        image: github
+        tag: latest
+    - name: 'Deploy to Azure Web App for Container'
+      uses: azure/webapps-deploy@v2
+      with: 
+        app-name: app-rub-devops-showcase
+        images: regrubdevopsshowcase.azurecr.io/github/github:latest
