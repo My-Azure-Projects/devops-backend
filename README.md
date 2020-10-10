@@ -7,7 +7,6 @@ The pipelines can be found in the following files:
 - Github Actuibs - *github\workflows\dontnet-core.yml*
 - Circle CI - *.circleci\config.yml*
 
-
 # Build and Test
 
 To build and run the application:
